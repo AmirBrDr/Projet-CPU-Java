@@ -1,4 +1,4 @@
-package noyeau;
+package noyau;
 
 public class CPU {
 }
