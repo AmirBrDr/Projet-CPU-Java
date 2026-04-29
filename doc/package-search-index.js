@@ -1,1 +1,1 @@
-packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html","k":"18"},{"l":"assembleur"},{"l":"noyau"}];updateSearchResults();
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html","k":"18"},{"l":"assembleur"},{"l":"interfaceutilisateur"},{"l":"noyau"}];updateSearchResults();
