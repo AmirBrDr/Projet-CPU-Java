@@ -5,6 +5,17 @@ import assembleur.*;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Représente le processeur central (CPU) du simulateur.
+ * <p>
+ * Cette classe orchestre l'exécution des instructions du programme.
+ * Elle contient la mémoire, la banque de registres et l'unité arithmétique
+ * et logique (ALU), ainsi que le compteur de programme (PC) indiquant
+ * la prochaine instruction à exécuter.
+ *
+ * @author Amirmahdi GHASEMI et Dorsa KHOSHNOOD
+ * @version 1.0
+ */
 public class CPU {
     private Memoire memoire;
     private BanqueRegistres banqueRegistres;
@@ -12,6 +23,11 @@ public class CPU {
     private int pc;
     private boolean enExecution;
 
+    /**
+     * Construit une nouvelle instance de CPU.
+     * Initialise la mémoire, la banque de registres, l'ALU,
+     * et met le compteur de programme (PC) à zéro.
+     */
     public CPU() {
         memoire = new Memoire();
         banqueRegistres = new BanqueRegistres();
@@ -20,6 +36,19 @@ public class CPU {
         enExecution = false;
     }
 
+    /**
+     * Retourne la banque de registres associée à ce CPU.
+     *
+     * @return l'instance de {@link BanqueRegistres} utilisée
+     */
+    public BanqueRegistres getBanqueRegistres() {
+        return banqueRegistres;
+    }
+
+    /**
+     * Lance l'exécution continue du programme chargé en mémoire.
+     * Le processeur s'arrête lorsqu'il rencontre une instruction BREAK.
+     */
     public void executerProgramme(){
         enExecution = true;
         while (enExecution){
@@ -27,23 +56,46 @@ public class CPU {
         }
     }
 
+    /**
+     * Exécute une seule instruction.
+     * Décode l'instruction pointée par le compteur de programme (PC)
+     * puis l'applique.
+     */
     public void executerInstruction(){
         Instruction instruction = decoderInstruction();
         appliquerInstruction(instruction);
     }
 
+    /**
+     * Lit le prochain code d'opération (opcode) en mémoire
+     * et incrémente le compteur de programme.
+     *
+     * @return le code de l'opération lu
+     */
     public byte lireOpocode(){
         byte opocode = memoire.lireOctet(pc);
         pc++;
         return opocode;
     }
 
+    /**
+     * Lit l'octet suivant en mémoire et incrémente le compteur de programme.
+     * Utilisé généralement pour lire les opérandes tels que les numéros de registres.
+     *
+     * @return l'octet lu
+     */
     public byte lireOctetSuivant(){
         byte octet = memoire.lireOctet(pc);
         pc++;
         return octet;
     }
 
+    /**
+     * Lit l'adresse suivante en mémoire sur deux octets
+     * et incrémente le compteur de programme de 2.
+     *
+     * @return l'adresse sur 16 bits reconstituée
+     */
     public int lireAdresseSuivante(){
         int haute = memoire.lireOctet(pc) & 0xFF;
         int basse = memoire.lireOctet(pc + 1) & 0xFF;
@@ -51,6 +103,12 @@ public class CPU {
         return (haute << 8) | basse;
     }
 
+    /**
+     * Charge un programme dans la mémoire du processeur à partir de l'adresse 0.
+     * Réinitialise la mémoire avant de charger le programme.
+     *
+     * @param programme le {@link Programme} contenant les instructions à charger
+     */
     public void chargerProgramme(Programme programme){
         memoire.vider();
         pc = 0;
@@ -178,13 +236,48 @@ public class CPU {
                 case BREAK -> {
                     memoire.ecrireOctet(adresse++, (byte) 0);
                 }
-                default -> {
-                    // DATA, STRING, LOAD_INDEXE, STORE_INDEXE → à compléter selon votre spec
+                case DATA -> {
+                    assembleur.OperandeDonnees data = (assembleur.OperandeDonnees) instruction.getOperandes().get(0);
+                    for (int val : data.getValeurs()) {
+                        memoire.ecrireOctet(adresse++, (byte) val);
+                    }
+                }
+                case STRING -> {
+                    assembleur.OperandeChaine chaine = (assembleur.OperandeChaine) instruction.getOperandes().get(0);
+                    byte[] bytes = chaine.getValeur().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    for (byte b : bytes) {
+                        memoire.ecrireOctet(adresse++, b);
+                    }
+                }
+                case LOAD_INDEXE -> {
+                    memoire.ecrireOctet(adresse++, (byte) 14);
+                    OperandeRegistre reg = (OperandeRegistre) instruction.getOperandes().get(0);
+                    OperandeAdresseIndexee adr = (OperandeAdresseIndexee) instruction.getOperandes().get(1);
+                    memoire.ecrireOctet(adresse++, (byte) reg.getNumeroRegistre());
+                    memoire.ecrireOctet(adresse++, (byte) ((adr.getAdresseBase() >> 8) & 0xFF));
+                    memoire.ecrireOctet(adresse++, (byte) (adr.getAdresseBase() & 0xFF));
+                    memoire.ecrireOctet(adresse++, (byte) adr.getRegistreIndex());
+                }
+                case STORE_INDEXE -> {
+                    memoire.ecrireOctet(adresse++, (byte) 15);
+                    OperandeRegistre reg = (OperandeRegistre) instruction.getOperandes().get(0);
+                    OperandeAdresseIndexee adr = (OperandeAdresseIndexee) instruction.getOperandes().get(1);
+                    memoire.ecrireOctet(adresse++, (byte) reg.getNumeroRegistre());
+                    memoire.ecrireOctet(adresse++, (byte) ((adr.getAdresseBase() >> 8) & 0xFF));
+                    memoire.ecrireOctet(adresse++, (byte) (adr.getAdresseBase() & 0xFF));
+                    memoire.ecrireOctet(adresse++, (byte) adr.getRegistreIndex());
                 }
             }
         }
     }
 
+    /**
+     * Décode l'instruction courante pointée par le compteur de programme.
+     * Instancie l'instruction appropriée selon l'opcode lu.
+     *
+     * @return l'{@link Instruction} décodée
+     * @throws IllegalStateException si le code d'opération est inconnu
+     */
     public Instruction decoderInstruction(){
         byte opcode = lireOpocode();
         List<Operande> operandes = new ArrayList<>();
@@ -299,10 +392,32 @@ public class CPU {
                 operandes.add(new OperandeAdresse(adr));
                 yield new Instruction(TypeInstruction.BNE, operandes, "bne r" + r1 + ", r" + r2 + ", @" + adr);
             }
+            case 14 -> {
+                int reg = lireOctetSuivant() & 0xFF;
+                int adrBase = lireAdresseSuivante();
+                int regIndex = lireOctetSuivant() & 0xFF;
+                operandes.add(new OperandeRegistre(reg));
+                operandes.add(new OperandeAdresseIndexee(adrBase, regIndex));
+                yield new Instruction(TypeInstruction.LOAD_INDEXE, operandes, "load r" + reg + ", @" + adrBase + ", r" + regIndex);
+            }
+            case 15 -> {
+                int reg = lireOctetSuivant() & 0xFF;
+                int adrBase = lireAdresseSuivante();
+                int regIndex = lireOctetSuivant() & 0xFF;
+                operandes.add(new OperandeRegistre(reg));
+                operandes.add(new OperandeAdresseIndexee(adrBase, regIndex));
+                yield new Instruction(TypeInstruction.STORE_INDEXE, operandes, "store r" + reg + ", @" + adrBase + ", r" + regIndex);
+            }
             default -> throw new IllegalStateException("Opcode inconnu: " + opcode);
         };
     }
 
+    /**
+     * Applique et exécute concrètement une instruction décodée
+     * en modifiant l'état du processeur (registres, mémoire, PC, etc.).
+     *
+     * @param instruction l'{@link Instruction} à appliquer
+     */
     public void appliquerInstruction(Instruction instruction){
         List<Operande> ops = instruction.getOperandes();
         switch (instruction.getTypeInstruction()) {
@@ -387,9 +502,29 @@ public class CPU {
                 int adr = ((OperandeAdresse) ops.get(2)).getAdresse();
                 if (a != b) pc = adr;
             }
+            case LOAD_INDEXE -> {
+                int reg = ((OperandeRegistre) ops.get(0)).getNumeroRegistre();
+                OperandeAdresseIndexee adr = (OperandeAdresseIndexee) ops.get(1);
+                int adresseBase = adr.getAdresseBase();
+                int index = banqueRegistres.lireRegistre(adr.getRegistreIndex()) & 0xFF;
+                byte val = memoire.lireOctet((adresseBase + index) & 0xFFFF);
+                banqueRegistres.ecrireRegistre(reg, val);
+            }
+            case STORE_INDEXE -> {
+                int reg = ((OperandeRegistre) ops.get(0)).getNumeroRegistre();
+                OperandeAdresseIndexee adr = (OperandeAdresseIndexee) ops.get(1);
+                int adresseBase = adr.getAdresseBase();
+                int index = banqueRegistres.lireRegistre(adr.getRegistreIndex()) & 0xFF;
+                byte val = banqueRegistres.lireRegistre(reg);
+                memoire.ecrireOctet((adresseBase + index) & 0xFFFF, val);
+            }
         }
     }
 
+    /**
+     * Réinitialise complètement le processeur.
+     * Vide la mémoire, efface tous les registres et remet le PC à zéro.
+     */
     public void reinitialiser(){
         memoire.vider();
         banqueRegistres.reinitialiser();
@@ -397,6 +532,9 @@ public class CPU {
         enExecution = false;
     }
 
+    /**
+     * Arrête l'exécution du programme en cours.
+     */
     public void arreter(){
         enExecution = false;
     }
