@@ -46,6 +46,33 @@ public class CPU {
     }
 
     /**
+     * Retourne la mémoire associée à ce CPU.
+     *
+     * @return l'instance de {@link Memoire} utilisée
+     */
+    public Memoire getMemoire() {
+        return memoire;
+    }
+
+    /**
+     * Retourne la valeur actuelle du compteur de programme (PC).
+     *
+     * @return l'adresse de la prochaine instruction à exécuter
+     */
+    public int getPc() {
+        return pc;
+    }
+
+    /**
+     * Indique si le CPU est actuellement en cours d'exécution.
+     *
+     * @return {@code true} si en cours d'exécution, {@code false} sinon
+     */
+    public boolean isEnExecution() {
+        return enExecution;
+    }
+
+    /**
      * Lance l'exécution continue du programme chargé en mémoire.
      * Le processeur s'arrête lorsqu'il rencontre une instruction BREAK.
      */
