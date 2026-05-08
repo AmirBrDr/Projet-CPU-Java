@@ -1,6 +1,7 @@
 package assembleur;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class Assembleur {
@@ -15,6 +16,11 @@ public class Assembleur {
     private static final int OPCODE_AND = 8;
     private static final int OPCODE_OR = 9;
     private static final int OPCODE_XOR = 10;
+    private static final int OPCODE_JUMP = 11;
+    private static final int OPCODE_BEQ = 12;
+    private static final int OPCODE_BNE = 13;
+    private static final int OPCODE_LOAD_INDEXE = 14;
+    private static final int OPCODE_STORE_INDEXE = 15;
 
     public Programme assembler(String source) {
         // Verification de l'entree avant de commencer l'assemblage.
@@ -100,6 +106,31 @@ public class Assembleur {
             return traduireInstructionXor(ligneNettoyee, ligneSource);
         }
 
+        // Delegation vers le traducteur specialise de l'instruction JUMP.
+        if (ligneNettoyee.toLowerCase().startsWith("jump ")) {
+            return traduireInstructionJump(ligneNettoyee, ligneSource);
+        }
+
+        // Delegation vers le traducteur specialise de l'instruction BEQ.
+        if (ligneNettoyee.toLowerCase().startsWith("beq ")) {
+            return traduireInstructionBeq(ligneNettoyee, ligneSource);
+        }
+
+        // Delegation vers le traducteur specialise de l'instruction BNE.
+        if (ligneNettoyee.toLowerCase().startsWith("bne ")) {
+            return traduireInstructionBne(ligneNettoyee, ligneSource);
+        }
+
+        // Delegation vers le traducteur specialise de la directive DATA.
+        if (ligneNettoyee.toLowerCase().startsWith("data ")) {
+            return traduireInstructionData(ligneNettoyee, ligneSource);
+        }
+
+        // Delegation vers le traducteur specialise de la directive STRING.
+        if (ligneNettoyee.toLowerCase().startsWith("string ")) {
+            return traduireInstructionString(ligneNettoyee, ligneSource);
+        }
+
         throw new IllegalArgumentException("Instruction non reconnue : " + ligneSource);
     }
 
@@ -123,6 +154,10 @@ public class Assembleur {
         // On retire le mot-cle "load" pour ne garder que les operandes.
         String reste = ligneNettoyee.substring(4).trim();
         String[] morceaux = reste.split(",");
+
+        if (morceaux.length == 3) {
+            return traduireInstructionLoadIndexe(morceaux, ligneSource);
+        }
 
         if (morceaux.length != 2) {
             throw new IllegalArgumentException("Syntaxe load invalide : " + ligneSource);
@@ -153,10 +188,37 @@ public class Assembleur {
         );
     }
 
+    private Instruction traduireInstructionLoadIndexe(String[] morceaux, String ligneSource) {
+        // L'instruction LOAD indexe attend un registre destination, une adresse de base et un registre d'index.
+        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
+        String deuxiemeOperande = morceaux[1].trim();
+        OperandeRegistre registreIndex = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
+
+        if (!deuxiemeOperande.startsWith("@")) {
+            throw new IllegalArgumentException("Adresse memoire invalide dans la ligne : " + ligneSource);
+        }
+
+        int adresseBase = lireValeurNumerique(deuxiemeOperande.substring(1).trim(), ligneSource);
+        OperandeAdresseIndexee adresseIndexee = new OperandeAdresseIndexee(
+                adresseBase,
+                registreIndex.getNumeroRegistre()
+        );
+
+        return new Instruction(
+                TypeInstruction.LOAD_INDEXE,
+                List.of(registreDestination, adresseIndexee),
+                ligneSource
+        );
+    }
+
     private Instruction traduireInstructionStore(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "store" pour ne garder que les operandes.
         String reste = ligneNettoyee.substring(5).trim();
         String[] morceaux = reste.split(",");
+
+        if (morceaux.length == 3) {
+            return traduireInstructionStoreIndexe(morceaux, ligneSource);
+        }
 
         if (morceaux.length != 2) {
             throw new IllegalArgumentException("Syntaxe store invalide : " + ligneSource);
@@ -176,6 +238,29 @@ public class Assembleur {
         return new Instruction(
                 TypeInstruction.STORE_MEMOIRE,
                 List.of(registreSource, adresseMemoire),
+                ligneSource
+        );
+    }
+
+    private Instruction traduireInstructionStoreIndexe(String[] morceaux, String ligneSource) {
+        // L'instruction STORE indexe attend un registre source, une adresse de base et un registre d'index.
+        OperandeRegistre registreSource = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
+        String deuxiemeOperande = morceaux[1].trim();
+        OperandeRegistre registreIndex = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
+
+        if (!deuxiemeOperande.startsWith("@")) {
+            throw new IllegalArgumentException("Adresse memoire invalide dans la ligne : " + ligneSource);
+        }
+
+        int adresseBase = lireValeurNumerique(deuxiemeOperande.substring(1).trim(), ligneSource);
+        OperandeAdresseIndexee adresseIndexee = new OperandeAdresseIndexee(
+                adresseBase,
+                registreIndex.getNumeroRegistre()
+        );
+
+        return new Instruction(
+                TypeInstruction.STORE_INDEXE,
+                List.of(registreSource, adresseIndexee),
                 ligneSource
         );
     }
@@ -327,6 +412,123 @@ public class Assembleur {
         );
     }
 
+    private Instruction traduireInstructionJump(String ligneNettoyee, String ligneSource) {
+        // On retire le mot-cle "jump" pour ne garder que l'adresse cible.
+        String reste = ligneNettoyee.substring(4).trim();
+
+        // L'instruction JUMP attend obligatoirement une adresse memoire.
+        if (!reste.startsWith("@")) {
+            throw new IllegalArgumentException("Adresse memoire invalide dans la ligne : " + ligneSource);
+        }
+
+        int adresse = lireValeurNumerique(reste.substring(1).trim(), ligneSource);
+        OperandeAdresse adresseCible = new OperandeAdresse(adresse);
+
+        return new Instruction(
+                TypeInstruction.JUMP,
+                List.of(adresseCible),
+                ligneSource
+        );
+    }
+
+    private Instruction traduireInstructionBeq(String ligneNettoyee, String ligneSource) {
+        // On retire le mot-cle "beq" pour ne garder que les operandes.
+        String reste = ligneNettoyee.substring(3).trim();
+        String[] morceaux = reste.split(",");
+
+        if (morceaux.length != 3) {
+            throw new IllegalArgumentException("Syntaxe beq invalide : " + ligneSource);
+        }
+
+        // L'instruction BEQ attend deux registres puis une adresse cible.
+        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
+        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
+        String troisiemeOperande = morceaux[2].trim();
+
+        if (!troisiemeOperande.startsWith("@")) {
+            throw new IllegalArgumentException("Adresse memoire invalide dans la ligne : " + ligneSource);
+        }
+
+        int adresse = lireValeurNumerique(troisiemeOperande.substring(1).trim(), ligneSource);
+        OperandeAdresse adresseCible = new OperandeAdresse(adresse);
+
+        return new Instruction(
+                TypeInstruction.BEQ,
+                List.of(premierRegistre, secondRegistre, adresseCible),
+                ligneSource
+        );
+    }
+
+    private Instruction traduireInstructionBne(String ligneNettoyee, String ligneSource) {
+        // On retire le mot-cle "bne" pour ne garder que les operandes.
+        String reste = ligneNettoyee.substring(3).trim();
+        String[] morceaux = reste.split(",");
+
+        if (morceaux.length != 3) {
+            throw new IllegalArgumentException("Syntaxe bne invalide : " + ligneSource);
+        }
+
+        // L'instruction BNE attend deux registres puis une adresse cible.
+        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
+        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
+        String troisiemeOperande = morceaux[2].trim();
+
+        if (!troisiemeOperande.startsWith("@")) {
+            throw new IllegalArgumentException("Adresse memoire invalide dans la ligne : " + ligneSource);
+        }
+
+        int adresse = lireValeurNumerique(troisiemeOperande.substring(1).trim(), ligneSource);
+        OperandeAdresse adresseCible = new OperandeAdresse(adresse);
+
+        return new Instruction(
+                TypeInstruction.BNE,
+                List.of(premierRegistre, secondRegistre, adresseCible),
+                ligneSource
+        );
+    }
+
+    private Instruction traduireInstructionData(String ligneNettoyee, String ligneSource) {
+        // On retire le mot-cle "data" pour ne garder que la liste des valeurs.
+        String reste = ligneNettoyee.substring(4).trim();
+        String[] morceaux = reste.split(",");
+
+        if (morceaux.length == 0) {
+            throw new IllegalArgumentException("Syntaxe data invalide : " + ligneSource);
+        }
+
+        // La directive DATA convertit chaque valeur en octet brut a ecrire en memoire.
+        int[] valeurs = new int[morceaux.length];
+        for (int i = 0; i < morceaux.length; i++) {
+            valeurs[i] = lireValeurNumerique(morceaux[i].trim(), ligneSource);
+        }
+
+        OperandeDonnees donnees = new OperandeDonnees(valeurs);
+        return new Instruction(
+                TypeInstruction.DATA,
+                List.of(donnees),
+                ligneSource
+        );
+    }
+
+    private Instruction traduireInstructionString(String ligneNettoyee, String ligneSource) {
+        // On retire le mot-cle "string" pour ne garder que le contenu de la chaine.
+        String reste = ligneNettoyee.substring(6).trim();
+
+        // La directive STRING attend une chaine encadree par des guillemets.
+        if (reste.length() < 2 || !reste.startsWith("\"") || !reste.endsWith("\"")) {
+            throw new IllegalArgumentException("Syntaxe string invalide : " + ligneSource);
+        }
+
+        String valeur = reste.substring(1, reste.length() - 1);
+        OperandeChaine chaine = new OperandeChaine(valeur);
+
+        return new Instruction(
+                TypeInstruction.STRING,
+                List.of(chaine),
+                ligneSource
+        );
+    }
+
     private OperandeRegistre lireOperandeRegistre(String texteRegistre, String ligneSource) {
         // Un registre valide doit commencer par la lettre 'r'.
         String registreMinuscule = texteRegistre.toLowerCase();
@@ -468,6 +670,77 @@ public class Assembleur {
                 codeMachine.write(premierRegistre.getNumeroRegistre());
                 codeMachine.write(secondRegistre.getNumeroRegistre());
                 codeMachine.write(registreDestination.getNumeroRegistre());
+            }
+
+            case JUMP -> {
+                OperandeAdresse adresse = (OperandeAdresse) instruction.getOperandes().get(0);
+
+                // Format attendu par le CPU : opcode, adresse sur deux octets.
+                codeMachine.write(OPCODE_JUMP);
+                ecrireAdresseSurDeuxOctets(codeMachine, adresse.getAdresse());
+            }
+
+            case BEQ -> {
+                OperandeRegistre premierRegistre = (OperandeRegistre) instruction.getOperandes().get(0);
+                OperandeRegistre secondRegistre = (OperandeRegistre) instruction.getOperandes().get(1);
+                OperandeAdresse adresse = (OperandeAdresse) instruction.getOperandes().get(2);
+
+                // Format attendu par le CPU : opcode, registre1, registre2, adresse sur deux octets.
+                codeMachine.write(OPCODE_BEQ);
+                codeMachine.write(premierRegistre.getNumeroRegistre());
+                codeMachine.write(secondRegistre.getNumeroRegistre());
+                ecrireAdresseSurDeuxOctets(codeMachine, adresse.getAdresse());
+            }
+
+            case BNE -> {
+                OperandeRegistre premierRegistre = (OperandeRegistre) instruction.getOperandes().get(0);
+                OperandeRegistre secondRegistre = (OperandeRegistre) instruction.getOperandes().get(1);
+                OperandeAdresse adresse = (OperandeAdresse) instruction.getOperandes().get(2);
+
+                // Format attendu par le CPU : opcode, registre1, registre2, adresse sur deux octets.
+                codeMachine.write(OPCODE_BNE);
+                codeMachine.write(premierRegistre.getNumeroRegistre());
+                codeMachine.write(secondRegistre.getNumeroRegistre());
+                ecrireAdresseSurDeuxOctets(codeMachine, adresse.getAdresse());
+            }
+
+            case LOAD_INDEXE -> {
+                OperandeRegistre registre = (OperandeRegistre) instruction.getOperandes().get(0);
+                OperandeAdresseIndexee adresse = (OperandeAdresseIndexee) instruction.getOperandes().get(1);
+
+                // Format attendu par le CPU : opcode, registre destination, adresse sur deux octets, registre d'index.
+                codeMachine.write(OPCODE_LOAD_INDEXE);
+                codeMachine.write(registre.getNumeroRegistre());
+                ecrireAdresseSurDeuxOctets(codeMachine, adresse.getAdresseBase());
+                codeMachine.write(adresse.getRegistreIndex());
+            }
+
+            case STORE_INDEXE -> {
+                OperandeRegistre registre = (OperandeRegistre) instruction.getOperandes().get(0);
+                OperandeAdresseIndexee adresse = (OperandeAdresseIndexee) instruction.getOperandes().get(1);
+
+                // Format attendu par le CPU : opcode, registre source, adresse sur deux octets, registre d'index.
+                codeMachine.write(OPCODE_STORE_INDEXE);
+                codeMachine.write(registre.getNumeroRegistre());
+                ecrireAdresseSurDeuxOctets(codeMachine, adresse.getAdresseBase());
+                codeMachine.write(adresse.getRegistreIndex());
+            }
+
+            case DATA -> {
+                OperandeDonnees donnees = (OperandeDonnees) instruction.getOperandes().get(0);
+
+                // La directive DATA ecrit directement les valeurs brutes dans le code machine.
+                for (int valeur : donnees.getValeurs()) {
+                    codeMachine.write(valeur);
+                }
+            }
+
+            case STRING -> {
+                OperandeChaine chaine = (OperandeChaine) instruction.getOperandes().get(0);
+
+                // La directive STRING ecrit directement les octets UTF-8 de la chaine.
+                byte[] bytes = chaine.getValeur().getBytes(StandardCharsets.UTF_8);
+                codeMachine.writeBytes(bytes);
             }
 
             default -> throw new IllegalArgumentException(

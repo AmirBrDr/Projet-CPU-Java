@@ -2,6 +2,8 @@ package test;
 
 import assembleur.Assembleur;
 import assembleur.Instruction;
+import assembleur.OperandeChaine;
+import assembleur.OperandeDonnees;
 import assembleur.Programme;
 import assembleur.TypeInstruction;
 import assembleur.TypeOperande;
@@ -52,6 +54,20 @@ class AssembleurTest {
         assertEquals(TypeOperande.ADRESSE, instruction.getOperandes().get(1).getType());
     }
 
+    // Verification d'un LOAD indexe avec une adresse de base et un registre d'index.
+    @Test
+    void testTraduireLigneLoadIndexe() {
+        Instruction instruction = assembleur.traduireLigne("load r0, @0x100, r1");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.LOAD_INDEXE, instruction.getTypeInstruction());
+
+        // On verifie la presence d'un registre destination et d'une adresse indexee.
+        assertEquals(2, instruction.getOperandes().size());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
+        assertEquals(TypeOperande.ADRESSE_INDEXEE, instruction.getOperandes().get(1).getType());
+    }
+
     // Verification d'un STORE qui ecrit la valeur d'un registre en memoire.
     @Test
     void testTraduireLigneStoreMemoire() {
@@ -61,6 +77,20 @@ class AssembleurTest {
         assertEquals(2, instruction.getOperandes().size());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
         assertEquals(TypeOperande.ADRESSE, instruction.getOperandes().get(1).getType());
+    }
+
+    // Verification d'un STORE indexe avec une adresse de base et un registre d'index.
+    @Test
+    void testTraduireLigneStoreIndexe() {
+        Instruction instruction = assembleur.traduireLigne("store r2, @0x100, r3");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.STORE_INDEXE, instruction.getTypeInstruction());
+
+        // On verifie la presence d'un registre source et d'une adresse indexee.
+        assertEquals(2, instruction.getOperandes().size());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
+        assertEquals(TypeOperande.ADRESSE_INDEXEE, instruction.getOperandes().get(1).getType());
     }
 
     // Verification d'un ADD avec deux registres source et un registre destination.
@@ -166,6 +196,83 @@ class AssembleurTest {
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(1).getType());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(2).getType());
+    }
+
+    // Verification d'un JUMP vers une adresse memoire.
+    @Test
+    void testTraduireLigneJump() {
+        Instruction instruction = assembleur.traduireLigne("jump @300");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.JUMP, instruction.getTypeInstruction());
+
+        // On verifie que l'unique operande est bien identifie comme une adresse.
+        assertEquals(1, instruction.getOperandes().size());
+        assertEquals(TypeOperande.ADRESSE, instruction.getOperandes().get(0).getType());
+    }
+
+    // Verification d'un BEQ avec deux registres et une adresse cible.
+    @Test
+    void testTraduireLigneBeq() {
+        Instruction instruction = assembleur.traduireLigne("beq r1, r2, @300");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.BEQ, instruction.getTypeInstruction());
+
+        // On verifie la nature des deux registres et de l'adresse.
+        assertEquals(3, instruction.getOperandes().size());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(1).getType());
+        assertEquals(TypeOperande.ADRESSE, instruction.getOperandes().get(2).getType());
+    }
+
+    // Verification d'un BNE avec deux registres et une adresse cible.
+    @Test
+    void testTraduireLigneBne() {
+        Instruction instruction = assembleur.traduireLigne("bne r3, r4, @300");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.BNE, instruction.getTypeInstruction());
+
+        // On verifie la nature des deux registres et de l'adresse.
+        assertEquals(3, instruction.getOperandes().size());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(1).getType());
+        assertEquals(TypeOperande.ADRESSE, instruction.getOperandes().get(2).getType());
+    }
+
+    // Verification d'une directive DATA avec plusieurs valeurs brutes.
+    @Test
+    void testTraduireLigneData() {
+        Instruction instruction = assembleur.traduireLigne("data 0, 1, 2, 3");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.DATA, instruction.getTypeInstruction());
+
+        // On verifie la presence d'un unique operande de type donnees.
+        assertEquals(1, instruction.getOperandes().size());
+        assertEquals(TypeOperande.DONNEE, instruction.getOperandes().get(0).getType());
+
+        // On verifie que les valeurs numeriques ont bien ete lues.
+        OperandeDonnees donnees = (OperandeDonnees) instruction.getOperandes().get(0);
+        assertArrayEquals(new int[]{0, 1, 2, 3}, donnees.getValeurs());
+    }
+
+    // Verification d'une directive STRING avec une chaine simple.
+    @Test
+    void testTraduireLigneString() {
+        Instruction instruction = assembleur.traduireLigne("string \"abcd\"");
+
+        // On verifie le type de l'instruction reconnu par le parser.
+        assertEquals(TypeInstruction.STRING, instruction.getTypeInstruction());
+
+        // On verifie la presence d'un unique operande de type chaine.
+        assertEquals(1, instruction.getOperandes().size());
+        assertEquals(TypeOperande.CHAINE, instruction.getOperandes().get(0).getType());
+
+        // On verifie que le contenu de la chaine a bien ete extrait.
+        OperandeChaine chaine = (OperandeChaine) instruction.getOperandes().get(0);
+        assertEquals("abcd", chaine.getValeur());
     }
 
     // Verification de l'assemblage d'un petit programme sur plusieurs lignes.
@@ -290,6 +397,90 @@ class AssembleurTest {
 
         // Le format binaire attendu est : opcode XOR, registre1, registre2, registre destination.
         byte[] attendu = {10, 3, 6, 9};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une instruction JUMP.
+    @Test
+    void testGenererCodeMachineJump() {
+        Programme programme = assembleur.assembler("jump @300");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // Le format binaire attendu est : opcode JUMP, adresse haute, adresse basse.
+        byte[] attendu = {11, 1, 44};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une instruction BEQ.
+    @Test
+    void testGenererCodeMachineBeq() {
+        Programme programme = assembleur.assembler("beq r1, r2, @300");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // Le format binaire attendu est : opcode BEQ, registre1, registre2, adresse haute, adresse basse.
+        byte[] attendu = {12, 1, 2, 1, 44};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une instruction BNE.
+    @Test
+    void testGenererCodeMachineBne() {
+        Programme programme = assembleur.assembler("bne r3, r4, @300");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // Le format binaire attendu est : opcode BNE, registre1, registre2, adresse haute, adresse basse.
+        byte[] attendu = {13, 3, 4, 1, 44};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une instruction LOAD indexe.
+    @Test
+    void testGenererCodeMachineLoadIndexe() {
+        Programme programme = assembleur.assembler("load r0, @0x100, r1");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // Le format binaire attendu est : opcode LOAD_INDEXE, registre destination, adresse haute, adresse basse, registre d'index.
+        byte[] attendu = {14, 0, 1, 0, 1};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une instruction STORE indexe.
+    @Test
+    void testGenererCodeMachineStoreIndexe() {
+        Programme programme = assembleur.assembler("store r2, @0x100, r3");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // Le format binaire attendu est : opcode STORE_INDEXE, registre source, adresse haute, adresse basse, registre d'index.
+        byte[] attendu = {15, 2, 1, 0, 3};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une directive DATA.
+    @Test
+    void testGenererCodeMachineData() {
+        Programme programme = assembleur.assembler("data 0, 1, 2, 3");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // La directive DATA doit ecrire directement les valeurs brutes.
+        byte[] attendu = {0, 1, 2, 3};
+
+        assertArrayEquals(attendu, codeMachine);
+    }
+
+    // Verification du code machine genere pour une directive STRING.
+    @Test
+    void testGenererCodeMachineString() {
+        Programme programme = assembleur.assembler("string \"abcd\"");
+        byte[] codeMachine = assembleur.genererCodeMachine(programme);
+
+        // La directive STRING doit ecrire directement les octets UTF-8 de la chaine.
+        byte[] attendu = {97, 98, 99, 100};
 
         assertArrayEquals(attendu, codeMachine);
     }
