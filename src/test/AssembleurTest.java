@@ -123,34 +123,36 @@ class AssembleurTest {
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(2).getType());
     }
 
-    // Verification d'un MUL avec deux registres source et un registre destination.
+    // Verification d'un MUL avec deux registres resultat et deux registres source.
     @Test
     void testTraduireLigneMul() {
-        Instruction instruction = assembleur.traduireLigne("mul r7, r8, r9");
+        Instruction instruction = assembleur.traduireLigne("mul r7, r8, r9, r10");
 
         // On verifie le type de l'instruction reconnu par le parser.
         assertEquals(TypeInstruction.MUL, instruction.getTypeInstruction());
 
-        // On verifie que les trois operandes sont bien identifies comme des registres.
-        assertEquals(3, instruction.getOperandes().size());
+        // On verifie que les quatre operandes sont bien identifies comme des registres.
+        assertEquals(4, instruction.getOperandes().size());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(1).getType());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(2).getType());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(3).getType());
     }
 
-    // Verification d'un DIV avec deux registres source et un registre destination.
+    // Verification d'un DIV avec deux registres resultat et deux registres source.
     @Test
     void testTraduireLigneDiv() {
-        Instruction instruction = assembleur.traduireLigne("div r10, r11, r12");
+        Instruction instruction = assembleur.traduireLigne("div r10, r11, r12, r13");
 
         // On verifie le type de l'instruction reconnu par le parser.
         assertEquals(TypeInstruction.DIV, instruction.getTypeInstruction());
 
-        // On verifie que les trois operandes sont bien identifies comme des registres.
-        assertEquals(3, instruction.getOperandes().size());
+        // On verifie que les quatre operandes sont bien identifies comme des registres.
+        assertEquals(4, instruction.getOperandes().size());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(0).getType());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(1).getType());
         assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(2).getType());
+        assertEquals(TypeOperande.REGISTRE, instruction.getOperandes().get(3).getType());
     }
 
     // Verification d'un AND avec deux registres source et un registre destination.
@@ -323,8 +325,8 @@ class AssembleurTest {
         Programme programme = assembleur.assembler("add r1, r2, r3");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode ADD, registre1, registre2, registre destination.
-        byte[] attendu = {4, 1, 2, 3};
+        // Syntaxe utilisateur : add destination, source1, source2.
+        byte[] attendu = {4, 2, 3, 1};
 
         assertArrayEquals(attendu, codeMachine);
     }
@@ -335,8 +337,8 @@ class AssembleurTest {
         Programme programme = assembleur.assembler("sub r4, r5, r6");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode SUB, registre1, registre2, registre destination.
-        byte[] attendu = {5, 4, 5, 6};
+        // Syntaxe utilisateur : sub destination, source1, source2.
+        byte[] attendu = {5, 5, 6, 4};
 
         assertArrayEquals(attendu, codeMachine);
     }
@@ -344,11 +346,11 @@ class AssembleurTest {
     // Verification du code machine genere pour une instruction MUL.
     @Test
     void testGenererCodeMachineMul() {
-        Programme programme = assembleur.assembler("mul r7, r8, r9");
+        Programme programme = assembleur.assembler("mul r7, r8, r9, r10");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode MUL, registre1, registre2, registre destination.
-        byte[] attendu = {6, 7, 8, 9};
+        // Syntaxe utilisateur : mul poidsFaible, poidsFort, source1, source2.
+        byte[] attendu = {6, 9, 10, 7, 8};
 
         assertArrayEquals(attendu, codeMachine);
     }
@@ -356,11 +358,11 @@ class AssembleurTest {
     // Verification du code machine genere pour une instruction DIV.
     @Test
     void testGenererCodeMachineDiv() {
-        Programme programme = assembleur.assembler("div r10, r11, r12");
+        Programme programme = assembleur.assembler("div r10, r11, r12, r13");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode DIV, registre1, registre2, registre destination.
-        byte[] attendu = {7, 10, 11, 12};
+        // Syntaxe utilisateur : div quotient, reste, source1, source2.
+        byte[] attendu = {7, 12, 13, 10, 11};
 
         assertArrayEquals(attendu, codeMachine);
     }
@@ -371,8 +373,8 @@ class AssembleurTest {
         Programme programme = assembleur.assembler("and r1, r3, r5");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode AND, registre1, registre2, registre destination.
-        byte[] attendu = {8, 1, 3, 5};
+        // Syntaxe utilisateur : and destination, source1, source2.
+        byte[] attendu = {8, 3, 5, 1};
 
         assertArrayEquals(attendu, codeMachine);
     }
@@ -383,8 +385,8 @@ class AssembleurTest {
         Programme programme = assembleur.assembler("or r2, r4, r6");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode OR, registre1, registre2, registre destination.
-        byte[] attendu = {9, 2, 4, 6};
+        // Syntaxe utilisateur : or destination, source1, source2.
+        byte[] attendu = {9, 4, 6, 2};
 
         assertArrayEquals(attendu, codeMachine);
     }
@@ -395,8 +397,8 @@ class AssembleurTest {
         Programme programme = assembleur.assembler("xor r3, r6, r9");
         byte[] codeMachine = assembleur.genererCodeMachine(programme);
 
-        // Le format binaire attendu est : opcode XOR, registre1, registre2, registre destination.
-        byte[] attendu = {10, 3, 6, 9};
+        // Syntaxe utilisateur : xor destination, source1, source2.
+        byte[] attendu = {10, 6, 9, 3};
 
         assertArrayEquals(attendu, codeMachine);
     }

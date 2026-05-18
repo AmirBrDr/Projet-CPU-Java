@@ -7,8 +7,11 @@ import noyau.BanqueRegistres;
 import noyau.Memoire;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Interface graphique pour le simulateur de CPU et l'assembleur.
@@ -17,21 +20,28 @@ import java.awt.*;
  * @version 1.0
  */
 public class SimulateurGUI extends JFrame {
+    private static final int TAILLE_MEMOIRE = 65536;
+    private static final int TAILLE_PAGE_MEMOIRE = 256;
 
     private JTextArea editeurSource;
+    private JTextArea numerosLignes;
     private JTextArea consoleLogs;
     private JTable tableRegistres;
     private JTable tableMemoire;
     private JLabel labelPC;
+    private JLabel labelPlageMemoire;
 
     private JButton btnAssembler;
     private JButton btnExecuter;
     private JButton btnPasAPas;
     private JButton btnReinitialiser;
+    private JButton btnMemoirePrecedente;
+    private JButton btnMemoireSuivante;
 
     private CPU cpu;
     private Assembleur assembleur;
     private Programme programmeActuel;
+    private int adresseDebutMemoireAffichee;
 
     public SimulateurGUI() {
         super("Simulateur CPU - Projet Carré Petit Utile");
@@ -51,18 +61,45 @@ public class SimulateurGUI extends JFrame {
         // --- ZONE GAUCHE : Éditeur de code source ---
         editeurSource = new JTextArea(20, 30);
         editeurSource.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        editeurSource.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                mettreAJourNumerosLignes();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                mettreAJourNumerosLignes();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                mettreAJourNumerosLignes();
+            }
+        });
+
+        numerosLignes = new JTextArea("1");
+        numerosLignes.setEditable(false);
+        numerosLignes.setFocusable(false);
+        numerosLignes.setFont(editeurSource.getFont());
+        numerosLignes.setBackground(new Color(240, 240, 240));
+        numerosLignes.setForeground(Color.GRAY);
+        numerosLignes.setMargin(new Insets(0, 6, 0, 6));
+
         JScrollPane scrollEditeur = new JScrollPane(editeurSource);
+        scrollEditeur.setRowHeaderView(numerosLignes);
         scrollEditeur.setBorder(BorderFactory.createTitledBorder("Code Source Assembleur"));
         add(scrollEditeur, BorderLayout.WEST);
 
         // --- ZONE CENTRALE : Console et Boutons ---
         JPanel panelCentre = new JPanel(new BorderLayout());
         
-        consoleLogs = new JTextArea(10, 40);
+        consoleLogs = new JTextArea(8, 28);
         consoleLogs.setEditable(false);
         consoleLogs.setFont(new Font("Monospaced", Font.PLAIN, 12));
         consoleLogs.setForeground(new Color(0, 100, 0));
         JScrollPane scrollConsole = new JScrollPane(consoleLogs);
+        scrollConsole.setPreferredSize(new Dimension(320, 0));
         scrollConsole.setBorder(BorderFactory.createTitledBorder("Console / Logs"));
         panelCentre.add(scrollConsole, BorderLayout.CENTER);
 
@@ -82,7 +119,7 @@ public class SimulateurGUI extends JFrame {
 
         // --- ZONE DROITE : État du CPU ---
         JPanel panelEtat = new JPanel(new BorderLayout());
-        panelEtat.setPreferredSize(new Dimension(300, 0));
+        panelEtat.setPreferredSize(new Dimension(460, 0));
         panelEtat.setBorder(BorderFactory.createTitledBorder("État du CPU"));
 
         labelPC = new JLabel("PC : 0x0000");
@@ -101,21 +138,33 @@ public class SimulateurGUI extends JFrame {
             modeleRegistres.addRow(new Object[]{"R" + i, "0x00", "0"});
         }
         JScrollPane scrollRegistres = new JScrollPane(tableRegistres);
-        scrollRegistres.setPreferredSize(new Dimension(300, 250));
+        scrollRegistres.setPreferredSize(new Dimension(460, 250));
 
         // Mémoire (affichage des 256 premiers octets)
-        String[] colonnesMemoire = {"Adresse", "Valeur (Hex)"};
+        String[] colonnesMemoire = {"Adresse (Hex)", "Adresse (Décimal)", "Valeur (Hex)", "Valeur (Décimal)"};
         DefaultTableModel modeleMemoire = new DefaultTableModel(colonnesMemoire, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
         tableMemoire = new JTable(modeleMemoire);
-        for (int i = 0; i < 256; i++) {
-            modeleMemoire.addRow(new Object[]{String.format("0x%04X", i), "0x00"});
+        for (int i = 0; i < TAILLE_PAGE_MEMOIRE; i++) {
+            modeleMemoire.addRow(new Object[]{String.format("0x%04X", i), String.valueOf(i), "0x00", "0"});
         }
         JScrollPane scrollMemoire = new JScrollPane(tableMemoire);
+        JPanel panelMemoire = new JPanel(new BorderLayout());
+        panelMemoire.add(scrollMemoire, BorderLayout.CENTER);
 
-        JSplitPane splitEtat = new JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollRegistres, scrollMemoire);
+        JPanel panelNavigationMemoire = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        btnMemoirePrecedente = new JButton("< Précédent");
+        btnMemoireSuivante = new JButton("Suivant >");
+        labelPlageMemoire = new JLabel();
+
+        panelNavigationMemoire.add(btnMemoirePrecedente);
+        panelNavigationMemoire.add(labelPlageMemoire);
+        panelNavigationMemoire.add(btnMemoireSuivante);
+        panelMemoire.add(panelNavigationMemoire, BorderLayout.SOUTH);
+
+        JSplitPane splitEtat = new JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollRegistres, panelMemoire);
         splitEtat.setResizeWeight(0.5);
         panelEtat.add(splitEtat, BorderLayout.CENTER);
 
@@ -126,11 +175,42 @@ public class SimulateurGUI extends JFrame {
         btnExecuter.addActionListener(e -> executerProgramme());
         btnPasAPas.addActionListener(e -> executerPasAPas());
         btnReinitialiser.addActionListener(e -> reinitialiser());
+        btnMemoirePrecedente.addActionListener(e -> changerPageMemoire(-TAILLE_PAGE_MEMOIRE));
+        btnMemoireSuivante.addActionListener(e -> changerPageMemoire(TAILLE_PAGE_MEMOIRE));
+    }
+
+    private void changerPageMemoire(int decalage) {
+        int nouvelleAdresse = adresseDebutMemoireAffichee + decalage;
+        if (nouvelleAdresse < 0) {
+            nouvelleAdresse = 0;
+        }
+        int dernierePage = TAILLE_MEMOIRE - TAILLE_PAGE_MEMOIRE;
+        if (nouvelleAdresse > dernierePage) {
+            nouvelleAdresse = dernierePage;
+        }
+
+        adresseDebutMemoireAffichee = nouvelleAdresse;
+        mettreAJourEtatCPU();
+    }
+
+    private void mettreAJourNumerosLignes() {
+        int nombreLignes = editeurSource.getLineCount();
+        int largeur = String.valueOf(nombreLignes).length();
+        StringBuilder texteNumeros = new StringBuilder();
+
+        for (int i = 1; i <= nombreLignes; i++) {
+            texteNumeros.append(String.format("%" + largeur + "d", i));
+            if (i < nombreLignes) {
+                texteNumeros.append(System.lineSeparator());
+            }
+        }
+
+        numerosLignes.setText(texteNumeros.toString());
     }
 
     private void assemblerProgramme() {
-        String source = editeurSource.getText().trim();
-        if (source.isEmpty()) {
+        String source = editeurSource.getText();
+        if (source.trim().isEmpty()) {
             logErreur("Le code source est vide !");
             return;
         }
@@ -153,14 +233,44 @@ public class SimulateurGUI extends JFrame {
             logErreur("Veuillez d'abord assembler le programme.");
             return;
         }
-        try {
-            cpu.executerProgramme();
-            mettreAJourEtatCPU();
-            logInfo("Exécution terminée.");
-        } catch (Exception ex) {
-            logErreur("Erreur à l'exécution : " + ex.getMessage());
-            mettreAJourEtatCPU();
-        }
+
+        setBoutonsExecutionActifs(false);
+        logInfo("Exécution lancée.");
+
+        SwingWorker<Void, Void> workerExecution = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                cpu.executerProgramme();
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    logInfo("Exécution terminée.");
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    cpu.arreter();
+                    logErreur("Exécution interrompue.");
+                } catch (ExecutionException ex) {
+                    cpu.arreter();
+                    logErreur("Erreur à l'exécution : " + ex.getCause().getMessage());
+                } finally {
+                    mettreAJourEtatCPU();
+                    setBoutonsExecutionActifs(true);
+                }
+            }
+        };
+
+        workerExecution.execute();
+    }
+
+    private void setBoutonsExecutionActifs(boolean actif) {
+        btnAssembler.setEnabled(actif);
+        btnExecuter.setEnabled(actif);
+        btnPasAPas.setEnabled(actif);
+        btnReinitialiser.setEnabled(actif);
     }
 
     private void executerPasAPas() {
@@ -176,7 +286,7 @@ public class SimulateurGUI extends JFrame {
                 return;
             }
             byte opcode = cpu.getMemoire().lireOctet(adresseActuelle);
-            if (opcode == 5) { // 5 correspond théoriquement à l'instruction BREAK
+            if (opcode == 0) { // 0 correspond à l'instruction BREAK
                 cpu.appliquerInstruction(cpu.decoderInstruction()); // pour traiter le break
                 mettreAJourEtatCPU();
                 logInfo("Instruction BREAK atteinte. Arrêt.");
@@ -187,6 +297,7 @@ public class SimulateurGUI extends JFrame {
             mettreAJourEtatCPU();
             logInfo("Exécution d'une instruction (PC = " + cpu.getPc() + ").");
         } catch (Exception ex) {
+            cpu.arreter();
             logErreur("Erreur à l'exécution pas à pas : " + ex.getMessage());
             mettreAJourEtatCPU();
         }
@@ -213,13 +324,26 @@ public class SimulateurGUI extends JFrame {
             modeleRegistres.setValueAt(String.valueOf(val), i, 2);
         }
 
-        // Mettre à jour la mémoire (affichage partiel 0-255)
+        // Mettre à jour la mémoire par pages de 256 adresses.
         Memoire mem = cpu.getMemoire();
         DefaultTableModel modeleMemoire = (DefaultTableModel) tableMemoire.getModel();
-        for (int i = 0; i < 256; i++) {
-            byte val = mem.lireOctet(i);
-            modeleMemoire.setValueAt(String.format("0x%02X", val), i, 1);
+        for (int i = 0; i < TAILLE_PAGE_MEMOIRE; i++) {
+            int adresse = adresseDebutMemoireAffichee + i;
+            byte val = mem.lireOctet(adresse);
+            modeleMemoire.setValueAt(String.format("0x%04X", adresse), i, 0);
+            modeleMemoire.setValueAt(String.valueOf(adresse), i, 1);
+            modeleMemoire.setValueAt(String.format("0x%02X", val), i, 2);
+            modeleMemoire.setValueAt(String.valueOf(val & 0xFF), i, 3);
         }
+
+        int adresseFinMemoireAffichee = adresseDebutMemoireAffichee + TAILLE_PAGE_MEMOIRE - 1;
+        labelPlageMemoire.setText(String.format(
+                "0x%04X - 0x%04X",
+                adresseDebutMemoireAffichee,
+                adresseFinMemoireAffichee
+        ));
+        btnMemoirePrecedente.setEnabled(adresseDebutMemoireAffichee > 0);
+        btnMemoireSuivante.setEnabled(adresseFinMemoireAffichee < TAILLE_MEMOIRE - 1);
     }
 
     private void logInfo(String message) {

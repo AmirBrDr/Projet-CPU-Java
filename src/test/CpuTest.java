@@ -45,6 +45,17 @@ class CPUTest {
                 mnem);
     }
 
+    private Instruction opDeuxResultats(TypeInstruction type, int r1, int r2, int rd1, int rd2, String mnem) {
+        return new Instruction(type,
+                List.of(
+                        new OperandeRegistre(r1),
+                        new OperandeRegistre(r2),
+                        new OperandeRegistre(rd1),
+                        new OperandeRegistre(rd2)
+                ),
+                mnem);
+    }
+
     private Instruction jump(int adr) {
         return new Instruction(TypeInstruction.JUMP,
                 List.of(new OperandeAdresse(adr)), "jump @" + adr);
@@ -204,11 +215,12 @@ class CPUTest {
         cpu.chargerProgramme(prog(
                 loadCst(0, 3),
                 loadCst(1, 4),
-                op(TypeInstruction.MUL, 0, 1, 2, "mul"),
+                opDeuxResultats(TypeInstruction.MUL, 0, 1, 2, 3, "mul"),
                 brk()
         ));
         cpu.executerProgramme();
         assertEquals((byte) 12, cpu.getBanqueRegistres().lireRegistre(2));
+        assertEquals((byte) 0, cpu.getBanqueRegistres().lireRegistre(3));
     }
 
     @Test
@@ -216,11 +228,12 @@ class CPUTest {
         cpu.chargerProgramme(prog(
                 loadCst(0, 99),
                 loadCst(1, 0),
-                op(TypeInstruction.MUL, 0, 1, 2, "mul"),
+                opDeuxResultats(TypeInstruction.MUL, 0, 1, 2, 3, "mul"),
                 brk()
         ));
         cpu.executerProgramme();
         assertEquals((byte) 0, cpu.getBanqueRegistres().lireRegistre(2));
+        assertEquals((byte) 0, cpu.getBanqueRegistres().lireRegistre(3));
     }
 
     // ──────────────────────────────────────────
@@ -232,11 +245,12 @@ class CPUTest {
         cpu.chargerProgramme(prog(
                 loadCst(0, 10),
                 loadCst(1, 3),
-                op(TypeInstruction.DIV, 0, 1, 2, "div"),
+                opDeuxResultats(TypeInstruction.DIV, 0, 1, 2, 3, "div"),
                 brk()
         ));
         cpu.executerProgramme();
         assertEquals((byte) 3, cpu.getBanqueRegistres().lireRegistre(2));
+        assertEquals((byte) 1, cpu.getBanqueRegistres().lireRegistre(3));
     }
 
     @Test
@@ -244,7 +258,7 @@ class CPUTest {
         cpu.chargerProgramme(prog(
                 loadCst(0, 10),
                 loadCst(1, 0),
-                op(TypeInstruction.DIV, 0, 1, 2, "div"),
+                opDeuxResultats(TypeInstruction.DIV, 0, 1, 2, 3, "div"),
                 brk()
         ));
         assertThrows(ArithmeticException.class, () -> cpu.executerProgramme());

@@ -3,6 +3,7 @@ package noyau;
 import assembleur.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -17,11 +18,14 @@ import java.util.List;
  * @version 1.0
  */
 public class CPU {
+    private static final int LIMITE_INSTRUCTIONS_EXECUTION = 100000;
+
     private Memoire memoire;
     private BanqueRegistres banqueRegistres;
     private ALU alu;
     private int pc;
     private boolean enExecution;
+    private boolean[] adressesExecutables;
 
     /**
      * Construit une nouvelle instance de CPU.
@@ -34,6 +38,7 @@ public class CPU {
         alu = new ALU();
         pc = 0;
         enExecution = false;
+        adressesExecutables = new boolean[65536];
     }
 
     /**
@@ -78,8 +83,18 @@ public class CPU {
      */
     public void executerProgramme(){
         enExecution = true;
+        int nombreInstructionsExecutees = 0;
         while (enExecution){
+            if (nombreInstructionsExecutees >= LIMITE_INSTRUCTIONS_EXECUTION) {
+                enExecution = false;
+                throw new IllegalStateException(
+                        "Limite de "
+                                + LIMITE_INSTRUCTIONS_EXECUTION
+                                + " instructions atteinte. Programme probablement en boucle infinie."
+                );
+            }
             executerInstruction();
+            nombreInstructionsExecutees++;
         }
     }
 
@@ -138,9 +153,18 @@ public class CPU {
      */
     public void chargerProgramme(Programme programme){
         memoire.vider();
-        pc = 0;
+        Arrays.fill(adressesExecutables, false);
         int adresse = 0;
+        int premiereAdresseExecutable = -1;
+
         for (Instruction instruction : programme.getInstructions()) {
+            if (estInstructionExecutable(instruction)) {
+                adressesExecutables[adresse] = true;
+                if (premiereAdresseExecutable == -1) {
+                    premiereAdresseExecutable = adresse;
+                }
+            }
+
             switch (instruction.getTypeInstruction()) {
                 case LOAD_CONSTANTE -> {
                     // opcode=1, reg, val  → 3 octets
@@ -191,19 +215,23 @@ public class CPU {
                     memoire.ecrireOctet(adresse++, (byte) 6);
                     OperandeRegistre r1 = (OperandeRegistre) instruction.getOperandes().get(0);
                     OperandeRegistre r2 = (OperandeRegistre) instruction.getOperandes().get(1);
-                    OperandeRegistre rd = (OperandeRegistre) instruction.getOperandes().get(2);
+                    OperandeRegistre rdBas = (OperandeRegistre) instruction.getOperandes().get(2);
+                    OperandeRegistre rdHaut = (OperandeRegistre) instruction.getOperandes().get(3);
                     memoire.ecrireOctet(adresse++, (byte) r1.getNumeroRegistre());
                     memoire.ecrireOctet(adresse++, (byte) r2.getNumeroRegistre());
-                    memoire.ecrireOctet(adresse++, (byte) rd.getNumeroRegistre());
+                    memoire.ecrireOctet(adresse++, (byte) rdBas.getNumeroRegistre());
+                    memoire.ecrireOctet(adresse++, (byte) rdHaut.getNumeroRegistre());
                 }
                 case DIV -> {
                     memoire.ecrireOctet(adresse++, (byte) 7);
                     OperandeRegistre r1 = (OperandeRegistre) instruction.getOperandes().get(0);
                     OperandeRegistre r2 = (OperandeRegistre) instruction.getOperandes().get(1);
-                    OperandeRegistre rd = (OperandeRegistre) instruction.getOperandes().get(2);
+                    OperandeRegistre rdQuotient = (OperandeRegistre) instruction.getOperandes().get(2);
+                    OperandeRegistre rdReste = (OperandeRegistre) instruction.getOperandes().get(3);
                     memoire.ecrireOctet(adresse++, (byte) r1.getNumeroRegistre());
                     memoire.ecrireOctet(adresse++, (byte) r2.getNumeroRegistre());
-                    memoire.ecrireOctet(adresse++, (byte) rd.getNumeroRegistre());
+                    memoire.ecrireOctet(adresse++, (byte) rdQuotient.getNumeroRegistre());
+                    memoire.ecrireOctet(adresse++, (byte) rdReste.getNumeroRegistre());
                 }
                 case AND -> {
                     memoire.ecrireOctet(adresse++, (byte) 8);
@@ -296,6 +324,62 @@ public class CPU {
                 }
             }
         }
+
+        pc = premiereAdresseExecutable == -1 ? 0 : premiereAdresseExecutable;
+    }
+
+    /**
+     * Indique si une instruction peut être exécutée directement par le CPU.
+     * Les directives DATA et STRING sont seulement chargées en mémoire.
+     *
+     * @param instruction l'instruction à analyser
+     * @return {@code true} si elle doit être décodée par le processeur, {@code false} sinon
+     */
+    private boolean estInstructionExecutable(Instruction instruction) {
+        return instruction.getTypeInstruction() != TypeInstruction.DATA
+                && instruction.getTypeInstruction() != TypeInstruction.STRING;
+    }
+
+    /**
+     * Place le compteur de programme sur la prochaine instruction exécutable.
+     * Cela évite de décoder les octets des directives DATA ou STRING comme des opcodes.
+     */
+    private void avancerVersInstructionExecutable() {
+        pc = trouverAdresseExecutableDepuis(pc);
+        if (pc >= adressesExecutables.length) {
+            arreter();
+        }
+    }
+
+    /**
+     * Recherche la prochaine adresse correspondant à une vraie instruction.
+     *
+     * @param adresse l'adresse à partir de laquelle commencer la recherche
+     * @return l'adresse de la prochaine instruction exécutable, ou la taille mémoire si aucune n'existe
+     */
+    private int trouverAdresseExecutableDepuis(int adresse) {
+        int adresseCourante = adresse;
+        while (adresseCourante < adressesExecutables.length && !adressesExecutables[adresseCourante]) {
+            adresseCourante++;
+        }
+        return adresseCourante;
+    }
+
+    /**
+     * Vérifie qu'une adresse de saut pointe exactement sur une instruction exécutable.
+     *
+     * @param adresse l'adresse cible du saut
+     * @return l'adresse validée
+     */
+    private int validerAdresseSaut(int adresse) {
+        if (adresse < 0 || adresse >= adressesExecutables.length || !adressesExecutables[adresse]) {
+            throw new IllegalStateException(
+                    "Adresse de saut non exécutable : "
+                            + adresse
+                            + " (elle pointe dans DATA/STRING ou au milieu d'une instruction)"
+            );
+        }
+        return adresse;
     }
 
     /**
@@ -306,6 +390,11 @@ public class CPU {
      * @throws IllegalStateException si le code d'opération est inconnu
      */
     public Instruction decoderInstruction(){
+        avancerVersInstructionExecutable();
+        if (!enExecution && pc >= adressesExecutables.length) {
+            return new Instruction(TypeInstruction.BREAK, List.of(), "break");
+        }
+
         byte opcode = lireOpocode();
         List<Operande> operandes = new ArrayList<>();
 
@@ -340,7 +429,7 @@ public class CPU {
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
                 operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.ADD, operandes, "add r" + r1 + ", r" + r2 + ", r" + rd);
+                yield new Instruction(TypeInstruction.ADD, operandes, "add r" + rd + ", r" + r1 + ", r" + r2);
             }
             case 5 -> {
                 int r1 = lireOctetSuivant() & 0xFF;
@@ -349,25 +438,37 @@ public class CPU {
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
                 operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.SUB, operandes, "sub r" + r1 + ", r" + r2 + ", r" + rd);
+                yield new Instruction(TypeInstruction.SUB, operandes, "sub r" + rd + ", r" + r1 + ", r" + r2);
             }
             case 6 -> {
                 int r1 = lireOctetSuivant() & 0xFF;
                 int r2 = lireOctetSuivant() & 0xFF;
-                int rd = lireOctetSuivant() & 0xFF;
+                int rdBas = lireOctetSuivant() & 0xFF;
+                int rdHaut = lireOctetSuivant() & 0xFF;
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
-                operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.MUL, operandes, "mul r" + r1 + ", r" + r2 + ", r" + rd);
+                operandes.add(new OperandeRegistre(rdBas));
+                operandes.add(new OperandeRegistre(rdHaut));
+                yield new Instruction(
+                        TypeInstruction.MUL,
+                        operandes,
+                        "mul r" + rdBas + ", r" + rdHaut + ", r" + r1 + ", r" + r2
+                );
             }
             case 7 -> {
                 int r1 = lireOctetSuivant() & 0xFF;
                 int r2 = lireOctetSuivant() & 0xFF;
-                int rd = lireOctetSuivant() & 0xFF;
+                int rdQuotient = lireOctetSuivant() & 0xFF;
+                int rdReste = lireOctetSuivant() & 0xFF;
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
-                operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.DIV, operandes, "div r" + r1 + ", r" + r2 + ", r" + rd);
+                operandes.add(new OperandeRegistre(rdQuotient));
+                operandes.add(new OperandeRegistre(rdReste));
+                yield new Instruction(
+                        TypeInstruction.DIV,
+                        operandes,
+                        "div r" + rdQuotient + ", r" + rdReste + ", r" + r1 + ", r" + r2
+                );
             }
             case 8 -> {
                 int r1 = lireOctetSuivant() & 0xFF;
@@ -376,7 +477,7 @@ public class CPU {
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
                 operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.AND, operandes, "and r" + r1 + ", r" + r2 + ", r" + rd);
+                yield new Instruction(TypeInstruction.AND, operandes, "and r" + rd + ", r" + r1 + ", r" + r2);
             }
             case 9 -> {
                 int r1 = lireOctetSuivant() & 0xFF;
@@ -385,7 +486,7 @@ public class CPU {
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
                 operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.OR, operandes, "or r" + r1 + ", r" + r2 + ", r" + rd);
+                yield new Instruction(TypeInstruction.OR, operandes, "or r" + rd + ", r" + r1 + ", r" + r2);
             }
             case 10 -> {
                 int r1 = lireOctetSuivant() & 0xFF;
@@ -394,7 +495,7 @@ public class CPU {
                 operandes.add(new OperandeRegistre(r1));
                 operandes.add(new OperandeRegistre(r2));
                 operandes.add(new OperandeRegistre(rd));
-                yield new Instruction(TypeInstruction.XOR, operandes, "xor r" + r1 + ", r" + r2 + ", r" + rd);
+                yield new Instruction(TypeInstruction.XOR, operandes, "xor r" + rd + ", r" + r1 + ", r" + r2);
             }
             case 11 -> {
                 int adr = lireAdresseSuivante();
@@ -482,18 +583,20 @@ public class CPU {
             case MUL -> {
                 byte a = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(0)).getNumeroRegistre());
                 byte b = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(1)).getNumeroRegistre());
-                int rd = ((OperandeRegistre) ops.get(2)).getNumeroRegistre();
+                int rdBas = ((OperandeRegistre) ops.get(2)).getNumeroRegistre();
+                int rdHaut = ((OperandeRegistre) ops.get(3)).getNumeroRegistre();
                 ResultatMulti res = alu.multiplier(a, b);
-                banqueRegistres.ecrireRegistre(rd, res.getPoidsFaible());
-                // poids fort perdu si un seul registre destination
+                banqueRegistres.ecrireRegistre(rdBas, res.getPoidsFaible());
+                banqueRegistres.ecrireRegistre(rdHaut, res.getPoidsFort());
             }
             case DIV -> {
                 byte a = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(0)).getNumeroRegistre());
                 byte b = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(1)).getNumeroRegistre());
-                int rd = ((OperandeRegistre) ops.get(2)).getNumeroRegistre();
+                int rdQuotient = ((OperandeRegistre) ops.get(2)).getNumeroRegistre();
+                int rdReste = ((OperandeRegistre) ops.get(3)).getNumeroRegistre();
                 ResultatDiv res = alu.diviser(a, b);
-                banqueRegistres.ecrireRegistre(rd, res.getQuotient());
-                // reste perdu si un seul registre destination
+                banqueRegistres.ecrireRegistre(rdQuotient, res.getQuotient());
+                banqueRegistres.ecrireRegistre(rdReste, res.getReste());
             }
             case AND -> {
                 byte a = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(0)).getNumeroRegistre());
@@ -514,20 +617,20 @@ public class CPU {
                 banqueRegistres.ecrireRegistre(rd, alu.xorBinaire(a, b));
             }
             case JUMP -> {
-                int adr = ((OperandeAdresse) ops.getFirst()).getAdresse();
-                pc = adr; // override PC directly
+                int adr = ((OperandeAdresse) ops.get(0)).getAdresse();
+                pc = validerAdresseSaut(adr); // override PC directly
             }
             case BEQ -> {
                 byte a = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(0)).getNumeroRegistre());
                 byte b = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(1)).getNumeroRegistre());
                 int adr = ((OperandeAdresse) ops.get(2)).getAdresse();
-                if (a == b) pc = adr;
+                if (a == b) pc = validerAdresseSaut(adr);
             }
             case BNE -> {
                 byte a = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(0)).getNumeroRegistre());
                 byte b = banqueRegistres.lireRegistre(((OperandeRegistre) ops.get(1)).getNumeroRegistre());
                 int adr = ((OperandeAdresse) ops.get(2)).getAdresse();
-                if (a != b) pc = adr;
+                if (a != b) pc = validerAdresseSaut(adr);
             }
             case LOAD_INDEXE -> {
                 int reg = ((OperandeRegistre) ops.get(0)).getNumeroRegistre();
@@ -555,6 +658,7 @@ public class CPU {
     public void reinitialiser(){
         memoire.vider();
         banqueRegistres.reinitialiser();
+        Arrays.fill(adressesExecutables, false);
         pc = 0;
         enExecution = false;
     }

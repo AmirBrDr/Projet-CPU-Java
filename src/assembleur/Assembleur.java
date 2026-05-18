@@ -4,6 +4,16 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * Transforme un code source assembleur en programme puis en code machine.
+ * <p>
+ * Cette classe reconnaît les instructions du processeur simulé, construit les
+ * objets {@link Instruction} correspondants et encode ensuite ces instructions
+ * dans le format binaire attendu par le CPU.
+ *
+ * @author Amirmahdi GHASEMI et Dorsa KHOSHNOOD
+ * @version 1.0
+ */
 public class Assembleur {
     private static final int OPCODE_BREAK = 0;
     private static final int OPCODE_LOAD_CONSTANTE = 1;
@@ -22,6 +32,12 @@ public class Assembleur {
     private static final int OPCODE_LOAD_INDEXE = 14;
     private static final int OPCODE_STORE_INDEXE = 15;
 
+    /**
+     * Assemble un code source complet en une suite d'instructions abstraites.
+     *
+     * @param source le texte assembleur à traduire
+     * @return un {@link Programme} contenant les instructions reconnues
+     */
     public Programme assembler(String source) {
         // Verification de l'entree avant de commencer l'assemblage.
         if (source == null) {
@@ -32,19 +48,99 @@ public class Assembleur {
         String[] lignes = source.split("\\R");
 
         // Chaque ligne non vide est traduite puis ajoutee au programme final.
-        for (String ligne : lignes) {
+        for (int indexLigne = 0; indexLigne < lignes.length; indexLigne++) {
+            String ligne = lignes[indexLigne];
             String ligneNettoyee = ligne.trim();
             if (ligneNettoyee.isEmpty()) {
                 continue;
             }
 
-            Instruction instruction = traduireLigne(ligne);
-            programme.ajouterInstruction(instruction);
+            try {
+                Instruction instruction = traduireLigne(ligne);
+                programme.ajouterInstruction(instruction);
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException(
+                        construireMessageErreur(indexLigne + 1, ligne, exception.getMessage()),
+                        exception
+                );
+            }
         }
 
         return programme;
     }
 
+    /**
+     * Construit un message d'erreur détaillé pour une ligne source invalide.
+     *
+     * @param numeroLigne  le numéro de la ligne dans le code source
+     * @param ligneSource  la ligne source originale
+     * @param messageErreur le message d'erreur initial
+     * @return un message détaillé affichable dans l'interface
+     */
+    private String construireMessageErreur(int numeroLigne, String ligneSource, String messageErreur) {
+        StringBuilder message = new StringBuilder();
+        message.append("Ligne ").append(numeroLigne).append(" : ").append(messageErreur);
+        message.append("\nCode : ").append(ligneSource.trim());
+
+        if (estErreurDeSyntaxe(messageErreur)) {
+            message.append("\nExemple correct : ").append(trouverExempleSyntaxe(ligneSource));
+        }
+
+        return message.toString();
+    }
+
+    /**
+     * Indique si une erreur correspond à une erreur de syntaxe utilisateur.
+     *
+     * @param messageErreur le message d'erreur à analyser
+     * @return {@code true} si l'erreur concerne la syntaxe, {@code false} sinon
+     */
+    private boolean estErreurDeSyntaxe(String messageErreur) {
+        return messageErreur.startsWith("Syntaxe ")
+                || messageErreur.startsWith("Instruction non reconnue")
+                || messageErreur.startsWith("Adresse memoire invalide")
+                || messageErreur.startsWith("Registre invalide")
+                || messageErreur.startsWith("Numero de registre invalide")
+                || messageErreur.startsWith("Valeur numerique invalide");
+    }
+
+    /**
+     * Retourne un exemple correct adapté au mot-clé de la ligne en erreur.
+     *
+     * @param ligneSource la ligne source originale
+     * @return une ligne assembleur valide servant d'exemple
+     */
+    private String trouverExempleSyntaxe(String ligneSource) {
+        String ligneNettoyee = ligneSource.trim().toLowerCase();
+        String[] mots = ligneNettoyee.split("\\s+");
+        String motCle = mots.length == 0 ? "" : mots[0];
+
+        return switch (motCle) {
+            case "break" -> "break";
+            case "load" -> "load r0, 5  ou  load r0, @100  ou  load r0, @100, r1";
+            case "store" -> "store r0, @100  ou  store r0, @100, r1";
+            case "add" -> "add r3, r1, r2";
+            case "sub" -> "sub r3, r1, r2";
+            case "mul" -> "mul r3, r4, r1, r2";
+            case "div" -> "div r3, r4, r1, r2";
+            case "and" -> "and r3, r1, r2";
+            case "or" -> "or r3, r1, r2";
+            case "xor" -> "xor r3, r1, r2";
+            case "jump" -> "jump @100";
+            case "beq" -> "beq r1, r2, @100";
+            case "bne" -> "bne r1, r2, @100";
+            case "data" -> "data 10, 20, 30";
+            case "string" -> "string \"Bonjour\"";
+            default -> "load r0, 5";
+        };
+    }
+
+    /**
+     * Traduit une ligne de code source en instruction abstraite.
+     *
+     * @param ligneSource la ligne assembleur à analyser
+     * @return l'{@link Instruction} correspondant à la ligne
+     */
     public Instruction traduireLigne(String ligneSource) {
         // Verification des cas invalides les plus simples.
         if (ligneSource == null) {
@@ -134,6 +230,12 @@ public class Assembleur {
         throw new IllegalArgumentException("Instruction non reconnue : " + ligneSource);
     }
 
+    /**
+     * Génère le code machine correspondant à un programme assemblé.
+     *
+     * @param programme le {@link Programme} à convertir en octets
+     * @return un tableau d'octets contenant le code machine
+     */
     public byte[] genererCodeMachine(Programme programme) {
         // Le programme doit exister avant de pouvoir etre converti en octets.
         if (programme == null) {
@@ -150,6 +252,13 @@ public class Assembleur {
         return codeMachine.toByteArray();
     }
 
+    /**
+     * Traduit une instruction LOAD, immédiate ou mémoire.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} LOAD construite
+     */
     private Instruction traduireInstructionLoad(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "load" pour ne garder que les operandes.
         String reste = ligneNettoyee.substring(4).trim();
@@ -188,6 +297,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une instruction LOAD utilisant une adresse indexée.
+     *
+     * @param morceaux    les opérandes séparés par des virgules
+     * @param ligneSource la ligne source originale
+     * @return l'{@link Instruction} LOAD indexée construite
+     */
     private Instruction traduireInstructionLoadIndexe(String[] morceaux, String ligneSource) {
         // L'instruction LOAD indexe attend un registre destination, une adresse de base et un registre d'index.
         OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
@@ -211,6 +327,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une instruction STORE, absolue ou indexée.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} STORE construite
+     */
     private Instruction traduireInstructionStore(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "store" pour ne garder que les operandes.
         String reste = ligneNettoyee.substring(5).trim();
@@ -242,6 +365,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une instruction STORE utilisant une adresse indexée.
+     *
+     * @param morceaux    les opérandes séparés par des virgules
+     * @param ligneSource la ligne source originale
+     * @return l'{@link Instruction} STORE indexée construite
+     */
     private Instruction traduireInstructionStoreIndexe(String[] morceaux, String ligneSource) {
         // L'instruction STORE indexe attend un registre source, une adresse de base et un registre d'index.
         OperandeRegistre registreSource = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
@@ -265,153 +395,162 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une instruction ADD.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} ADD construite
+     */
     private Instruction traduireInstructionAdd(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "add" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(3).trim();
-        String[] morceaux = reste.split(",");
-
-        if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe add invalide : " + ligneSource);
-        }
-
-        // L'instruction ADD utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
-
-        return new Instruction(
-                TypeInstruction.ADD,
-                List.of(premierRegistre, secondRegistre, registreDestination),
-                ligneSource
-        );
+        return traduireOperationTroisRegistres(ligneNettoyee, ligneSource, "add", TypeInstruction.ADD);
     }
 
+    /**
+     * Traduit une instruction SUB.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} SUB construite
+     */
     private Instruction traduireInstructionSub(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "sub" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(3).trim();
-        String[] morceaux = reste.split(",");
-
-        if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe sub invalide : " + ligneSource);
-        }
-
-        // L'instruction SUB utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
-
-        return new Instruction(
-                TypeInstruction.SUB,
-                List.of(premierRegistre, secondRegistre, registreDestination),
-                ligneSource
-        );
+        return traduireOperationTroisRegistres(ligneNettoyee, ligneSource, "sub", TypeInstruction.SUB);
     }
 
+    /**
+     * Traduit une instruction MUL.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} MUL construite
+     */
     private Instruction traduireInstructionMul(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "mul" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(3).trim();
-        String[] morceaux = reste.split(",");
-
-        if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe mul invalide : " + ligneSource);
-        }
-
-        // L'instruction MUL utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
-
-        return new Instruction(
-                TypeInstruction.MUL,
-                List.of(premierRegistre, secondRegistre, registreDestination),
-                ligneSource
-        );
+        return traduireOperationQuatreRegistres(ligneNettoyee, ligneSource, "mul", TypeInstruction.MUL);
     }
 
+    /**
+     * Traduit une instruction DIV.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} DIV construite
+     */
     private Instruction traduireInstructionDiv(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "div" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(3).trim();
-        String[] morceaux = reste.split(",");
-
-        if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe div invalide : " + ligneSource);
-        }
-
-        // L'instruction DIV utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
-
-        return new Instruction(
-                TypeInstruction.DIV,
-                List.of(premierRegistre, secondRegistre, registreDestination),
-                ligneSource
-        );
+        return traduireOperationQuatreRegistres(ligneNettoyee, ligneSource, "div", TypeInstruction.DIV);
     }
 
+    /**
+     * Traduit une instruction AND.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} AND construite
+     */
     private Instruction traduireInstructionAnd(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "and" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(3).trim();
-        String[] morceaux = reste.split(",");
-
-        if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe and invalide : " + ligneSource);
-        }
-
-        // L'instruction AND utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
-
-        return new Instruction(
-                TypeInstruction.AND,
-                List.of(premierRegistre, secondRegistre, registreDestination),
-                ligneSource
-        );
+        return traduireOperationTroisRegistres(ligneNettoyee, ligneSource, "and", TypeInstruction.AND);
     }
 
+    /**
+     * Traduit une instruction OR.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} OR construite
+     */
     private Instruction traduireInstructionOr(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "or" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(2).trim();
-        String[] morceaux = reste.split(",");
-
-        if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe or invalide : " + ligneSource);
-        }
-
-        // L'instruction OR utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
-
-        return new Instruction(
-                TypeInstruction.OR,
-                List.of(premierRegistre, secondRegistre, registreDestination),
-                ligneSource
-        );
+        return traduireOperationTroisRegistres(ligneNettoyee, ligneSource, "or", TypeInstruction.OR);
     }
 
+    /**
+     * Traduit une instruction XOR.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} XOR construite
+     */
     private Instruction traduireInstructionXor(String ligneNettoyee, String ligneSource) {
-        // On retire le mot-cle "xor" pour ne garder que les trois registres.
-        String reste = ligneNettoyee.substring(3).trim();
+        return traduireOperationTroisRegistres(ligneNettoyee, ligneSource, "xor", TypeInstruction.XOR);
+    }
+
+    /**
+     * Traduit une opération à trois registres avec la destination en premier.
+     *
+     * @param ligneNettoyee   la ligne sans espaces inutiles en début et fin
+     * @param ligneSource     la ligne source originale
+     * @param motCle          le mot-clé de l'instruction
+     * @param typeInstruction le type d'instruction à construire
+     * @return l'{@link Instruction} construite
+     */
+    private Instruction traduireOperationTroisRegistres(
+            String ligneNettoyee,
+            String ligneSource,
+            String motCle,
+            TypeInstruction typeInstruction
+    ) {
+        String reste = ligneNettoyee.substring(motCle.length()).trim();
         String[] morceaux = reste.split(",");
 
         if (morceaux.length != 3) {
-            throw new IllegalArgumentException("Syntaxe xor invalide : " + ligneSource);
+            throw new IllegalArgumentException("Syntaxe " + motCle + " invalide : " + ligneSource);
         }
 
-        // L'instruction XOR utilise deux registres source et un registre destination.
-        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
-        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
-        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
+        // Syntaxe utilisateur : OP destination, source1, source2.
+        // Format interne du CPU : source1, source2, destination.
+        OperandeRegistre registreDestination = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
+        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
+        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
 
         return new Instruction(
-                TypeInstruction.XOR,
+                typeInstruction,
                 List.of(premierRegistre, secondRegistre, registreDestination),
                 ligneSource
         );
     }
 
+    /**
+     * Traduit une opération à deux sources et deux registres de résultat.
+     *
+     * @param ligneNettoyee   la ligne sans espaces inutiles en début et fin
+     * @param ligneSource     la ligne source originale
+     * @param motCle          le mot-clé de l'instruction
+     * @param typeInstruction le type d'instruction à construire
+     * @return l'{@link Instruction} construite
+     */
+    private Instruction traduireOperationQuatreRegistres(
+            String ligneNettoyee,
+            String ligneSource,
+            String motCle,
+            TypeInstruction typeInstruction
+    ) {
+        String reste = ligneNettoyee.substring(motCle.length()).trim();
+        String[] morceaux = reste.split(",");
+
+        if (morceaux.length != 4) {
+            throw new IllegalArgumentException("Syntaxe " + motCle + " invalide : " + ligneSource);
+        }
+
+        // Syntaxe utilisateur : OP resultat1, resultat2, source1, source2.
+        // MUL : resultat1 = poids faible, resultat2 = poids fort.
+        // DIV : resultat1 = quotient, resultat2 = reste.
+        OperandeRegistre premierResultat = lireOperandeRegistre(morceaux[0].trim(), ligneSource);
+        OperandeRegistre secondResultat = lireOperandeRegistre(morceaux[1].trim(), ligneSource);
+        OperandeRegistre premierRegistre = lireOperandeRegistre(morceaux[2].trim(), ligneSource);
+        OperandeRegistre secondRegistre = lireOperandeRegistre(morceaux[3].trim(), ligneSource);
+
+        return new Instruction(
+                typeInstruction,
+                List.of(premierRegistre, secondRegistre, premierResultat, secondResultat),
+                ligneSource
+        );
+    }
+
+    /**
+     * Traduit une instruction JUMP vers une adresse mémoire.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} JUMP construite
+     */
     private Instruction traduireInstructionJump(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "jump" pour ne garder que l'adresse cible.
         String reste = ligneNettoyee.substring(4).trim();
@@ -431,6 +570,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une instruction BEQ vers une adresse mémoire.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} BEQ construite
+     */
     private Instruction traduireInstructionBeq(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "beq" pour ne garder que les operandes.
         String reste = ligneNettoyee.substring(3).trim();
@@ -459,6 +605,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une instruction BNE vers une adresse mémoire.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} BNE construite
+     */
     private Instruction traduireInstructionBne(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "bne" pour ne garder que les operandes.
         String reste = ligneNettoyee.substring(3).trim();
@@ -487,6 +640,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une directive DATA en valeurs brutes.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} DATA construite
+     */
     private Instruction traduireInstructionData(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "data" pour ne garder que la liste des valeurs.
         String reste = ligneNettoyee.substring(4).trim();
@@ -510,6 +670,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Traduit une directive STRING en chaîne de caractères.
+     *
+     * @param ligneNettoyee la ligne sans espaces inutiles en début et fin
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link Instruction} STRING construite
+     */
     private Instruction traduireInstructionString(String ligneNettoyee, String ligneSource) {
         // On retire le mot-cle "string" pour ne garder que le contenu de la chaine.
         String reste = ligneNettoyee.substring(6).trim();
@@ -529,6 +696,13 @@ public class Assembleur {
         );
     }
 
+    /**
+     * Lit un opérande de registre depuis son écriture textuelle.
+     *
+     * @param texteRegistre le texte représentant le registre, par exemple {@code r0}
+     * @param ligneSource   la ligne source originale
+     * @return l'{@link OperandeRegistre} correspondant
+     */
     private OperandeRegistre lireOperandeRegistre(String texteRegistre, String ligneSource) {
         // Un registre valide doit commencer par la lettre 'r'.
         String registreMinuscule = texteRegistre.toLowerCase();
@@ -545,6 +719,13 @@ public class Assembleur {
         }
     }
 
+    /**
+     * Lit une valeur numérique décimale ou hexadécimale.
+     *
+     * @param texteValeur le texte représentant la valeur numérique
+     * @param ligneSource la ligne source originale
+     * @return la valeur entière décodée
+     */
     private int lireValeurNumerique(String texteValeur, String ligneSource) {
         try {
             // Le sujet autorise les ecritures decimales et hexadecimales.
@@ -557,6 +738,12 @@ public class Assembleur {
         }
     }
 
+    /**
+     * Écrit l'encodage machine d'une instruction dans le flux d'octets.
+     *
+     * @param codeMachine le flux recevant les octets générés
+     * @param instruction l'instruction à encoder
+     */
     private void ecrireInstruction(ByteArrayOutputStream codeMachine, Instruction instruction) {
         switch (instruction.getTypeInstruction()) {
             case BREAK -> codeMachine.write(OPCODE_BREAK);
@@ -615,25 +802,29 @@ public class Assembleur {
             case MUL -> {
                 OperandeRegistre premierRegistre = (OperandeRegistre) instruction.getOperandes().get(0);
                 OperandeRegistre secondRegistre = (OperandeRegistre) instruction.getOperandes().get(1);
-                OperandeRegistre registreDestination = (OperandeRegistre) instruction.getOperandes().get(2);
+                OperandeRegistre registrePoidsFaible = (OperandeRegistre) instruction.getOperandes().get(2);
+                OperandeRegistre registrePoidsFort = (OperandeRegistre) instruction.getOperandes().get(3);
 
-                // Format attendu par le CPU : opcode, registre1, registre2, registre destination.
+                // Format attendu par le CPU : opcode, registre1, registre2, poids faible, poids fort.
                 codeMachine.write(OPCODE_MUL);
                 codeMachine.write(premierRegistre.getNumeroRegistre());
                 codeMachine.write(secondRegistre.getNumeroRegistre());
-                codeMachine.write(registreDestination.getNumeroRegistre());
+                codeMachine.write(registrePoidsFaible.getNumeroRegistre());
+                codeMachine.write(registrePoidsFort.getNumeroRegistre());
             }
 
             case DIV -> {
                 OperandeRegistre premierRegistre = (OperandeRegistre) instruction.getOperandes().get(0);
                 OperandeRegistre secondRegistre = (OperandeRegistre) instruction.getOperandes().get(1);
-                OperandeRegistre registreDestination = (OperandeRegistre) instruction.getOperandes().get(2);
+                OperandeRegistre registreQuotient = (OperandeRegistre) instruction.getOperandes().get(2);
+                OperandeRegistre registreReste = (OperandeRegistre) instruction.getOperandes().get(3);
 
-                // Format attendu par le CPU : opcode, registre1, registre2, registre destination.
+                // Format attendu par le CPU : opcode, registre1, registre2, quotient, reste.
                 codeMachine.write(OPCODE_DIV);
                 codeMachine.write(premierRegistre.getNumeroRegistre());
                 codeMachine.write(secondRegistre.getNumeroRegistre());
-                codeMachine.write(registreDestination.getNumeroRegistre());
+                codeMachine.write(registreQuotient.getNumeroRegistre());
+                codeMachine.write(registreReste.getNumeroRegistre());
             }
 
             case AND -> {
@@ -749,6 +940,12 @@ public class Assembleur {
         }
     }
 
+    /**
+     * Écrit une adresse sur deux octets dans le flux de code machine.
+     *
+     * @param codeMachine le flux recevant les octets générés
+     * @param adresse     l'adresse 16 bits à écrire
+     */
     private void ecrireAdresseSurDeuxOctets(ByteArrayOutputStream codeMachine, int adresse) {
         // L'adresse 16 bits est ecrite en deux octets : poids fort puis poids faible.
         codeMachine.write((adresse >> 8) & 0xFF);
