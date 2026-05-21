@@ -284,7 +284,42 @@ Expliquer que :
 - le CPU n'exécute pas ces données comme des instructions.
 
 
-## Slide 11 - Interface graphique
+## Slide 11 - Démonstration 4 : multiplication et saut inconditionnel
+
+### Contenu de la slide
+
+Démonstration : multiplication et saut inconditionnel
+
+```asm
+LOAD R0, 6
+LOAD R1, 7
+MUL R2, R3, R0, R1
+JUMP @17
+LOAD R2, 0
+STORE R2, @200
+BREAK
+```
+
+À afficher sur la slide :
+
+```text
+MUL R2, R3, R0, R1  -> 6 x 7 = 42
+R2 = poids faible du résultat
+R3 = poids fort du résultat
+JUMP @17 saute l'instruction LOAD R2, 0
+```
+
+### Capture recommandée
+
+Capture après exécution :
+
+- `R2 = 42` ;
+- `R3 = 0` ;
+- adresse mémoire `200` avec la valeur `42` ;
+- le code montre que `LOAD R2, 0` a été ignoré grâce à `JUMP`.
+
+
+## Slide 12 - Interface graphique
 
 ### Contenu de la slide
 
@@ -301,7 +336,7 @@ Annoter :
 ```
 
 
-## Slide 12 - Gestion des erreurs
+## Slide 13 - Gestion des erreurs
 
 ### Contenu de la slide
 
@@ -321,22 +356,6 @@ Exemple correct : load r0, 5 ou load r0, @100
 ### Capture recommandée
 
 Capture de la console avec une erreur d'assemblage.
-
-
-## Slide 13 - Sécurité d'exécution
-
-### Contenu de la slide
-
-Afficher :
-
-```text
-Sécurités ajoutées :
-- arrêt avec BREAK
-- limite de 100000 instructions
-- vérification des adresses de saut
-- DATA et STRING non exécutés
-- erreurs affichées dans la console
-```
 
 
 ## Slide 14 - Tests et validation
@@ -450,23 +469,23 @@ Durée conseillée : **45 secondes**
 
 > Cette démonstration montre la gestion des données en mémoire. L'instruction DATA écrit directement une suite de valeurs dans la mémoire, par exemple 10, 20 et 30. L'instruction STRING écrit les caractères d'une chaîne sous forme d'octets UTF-8. Dans notre simulateur, DATA et STRING sont bien chargés en mémoire, mais ne sont pas considérés comme des instructions exécutables. Cela évite que le CPU essaie d'exécuter une donnée comme un opcode, ce qui pouvait provoquer des erreurs comme opcode inconnu.
 
-### Slide 11 - Interface graphique
+### Slide 11 - Démonstration 4 : multiplication et saut inconditionnel
+
+Durée conseillée : **50 secondes**
+
+> Cette quatrième démonstration permet de montrer deux instructions qui ne sont pas visibles dans les démonstrations précédentes : MUL et JUMP. On charge d'abord 6 dans R0 et 7 dans R1. Ensuite, MUL R2, R3, R0, R1 multiplie les deux valeurs. Le résultat 42 est placé dans R2, et R3 contient la partie haute du résultat, ici 0. Après cela, JUMP @17 saute directement à l'instruction STORE. L'instruction LOAD R2, 0 est donc ignorée. À la fin, la mémoire à l'adresse 200 contient bien 42, ce qui montre à la fois la multiplication et le saut inconditionnel.
+
+### Slide 12 - Interface graphique
 
 Durée conseillée : **55 secondes**
 
 > L'interface graphique permet de manipuler le simulateur plus facilement. À gauche, on trouve l'éditeur de code assembleur, avec les numéros de lignes. Au centre, la console affiche les informations et les erreurs. En bas, les boutons permettent d'assembler le programme, de l'exécuter entièrement, de l'exécuter pas à pas ou de réinitialiser le CPU. À droite, on voit l'état du processeur avec le PC, les registres et la mémoire. La mémoire est affichée par pages de 256 adresses, avec les boutons Précédent et Suivant pour parcourir les 64 Ko.
 
-### Slide 12 - Gestion des erreurs
+### Slide 13 - Gestion des erreurs
 
 Durée conseillée : **40 secondes**
 
 > Le simulateur donne aussi des messages d'erreur pour aider l'utilisateur. Par exemple, si on écrit LOAD R0 sans deuxième opérande, l'assembleur détecte une erreur de syntaxe. Il indique la ligne concernée, affiche le code qui pose problème, et donne un exemple correct. Cette fonctionnalité est utile parce qu'elle permet de corriger plus rapidement les programmes assembleur, surtout quand il y a plusieurs lignes de code.
-
-### Slide 13 - Sécurité d'exécution
-
-Durée conseillée : **45 secondes**
-
-> Plusieurs sécurités ont été ajoutées pendant l'exécution. D'abord, le programme s'arrête normalement quand il rencontre BREAK. Ensuite, le CPU possède une limite de 100000 instructions pour éviter qu'une boucle infinie bloque l'application. Les adresses de saut sont aussi vérifiées : un JUMP, un BEQ ou un BNE doit pointer exactement vers une vraie instruction exécutable. Il n'est donc pas possible de sauter dans une zone DATA, STRING, ou au milieu d'une instruction.
 
 ### Slide 14 - Tests et validation
 
@@ -494,9 +513,9 @@ Durée conseillée : **35 secondes**
 | 8 | 50 s |
 | 9 | 1 min 05 |
 | 10 | 45 s |
-| 11 | 55 s |
-| 12 | 40 s |
-| 13 | 45 s |
+| 11 | 50 s |
+| 12 | 55 s |
+| 13 | 40 s |
 | 14 | 40 s |
 | 15 | 35 s |
 
@@ -537,9 +556,9 @@ Utiliser un style simple et technique :
 8. Démo programme simple
 9. Démo boucle avec `BNE`
 10. Démo `DATA` et `STRING`
-11. Interface graphique
-12. Gestion des erreurs
-13. Sécurités d'exécution
+11. Démo `JUMP` et `MUL`
+12. Interface graphique
+13. Gestion des erreurs
 14. Tests et validation
 15. Conclusion
 
@@ -547,7 +566,7 @@ Utiliser un style simple et technique :
 
 - Faire environ 30 à 45 secondes par slide.
 - Ne pas lire tout le texte affiché.
-- Montrer seulement 2 ou 3 vraies démonstrations.
+- Montrer seulement 3 ou 4 vraies démonstrations.
 - Préparer les captures avant d'enregistrer la voix.
 - Parler surtout du fonctionnement, pas de chaque ligne de code Java.
 - Pour les programmes assembleur, expliquer l'idée générale plutôt que chaque octet.
@@ -561,10 +580,11 @@ Avant de créer les slides, préparer ces captures :
 3. Résultat après exécution du programme simple.
 4. Résultat après exécution du programme avec boucle.
 5. Table mémoire avec une adresse intéressante.
-6. Console affichant une erreur de syntaxe.
-7. Arborescence du projet dans l'IDE.
-8. Dossier `doc/index.html` ou Javadoc ouverte.
-9. Dossier `src/test` avec les tests.
+6. Résultat après exécution du programme avec `JUMP` et `MUL`.
+7. Console affichant une erreur de syntaxe.
+8. Arborescence du projet dans l'IDE.
+9. Dossier `doc/index.html` ou Javadoc ouverte.
+10. Dossier `src/test` avec les tests.
 
 ## Script court de présentation complète
 
@@ -584,8 +604,10 @@ Tu peux utiliser ce texte comme base pour ta voix off :
 >
 > Un deuxième exemple montre une boucle avec BNE. Le programme additionne les nombres de 1 à 5, puis stocke le résultat. Cela montre que les sauts conditionnels et le compteur de programme fonctionnent correctement.
 >
-> Le simulateur gère aussi DATA et STRING, qui permettent d'écrire directement des données en mémoire. Une sécurité empêche le CPU d'exécuter ces données comme des instructions.
+> Le simulateur gère aussi DATA et STRING, qui permettent d'écrire directement des données en mémoire. Ces données sont chargées en mémoire, mais elles ne sont pas présentées comme des instructions à exécuter dans la démonstration.
 >
-> Enfin, l'application gère les erreurs. Si une syntaxe est incorrecte, elle indique la ligne concernée et donne un exemple correct. Le CPU vérifie aussi les sauts invalides et protège contre les boucles infinies avec une limite d'instructions.
+> On montre aussi MUL et JUMP avec un exemple où le CPU calcule 6 fois 7, puis saute une instruction volontairement placée au milieu du programme. Cela permet de vérifier que l'ALU calcule bien la multiplication et que JUMP modifie correctement le compteur de programme.
+>
+> Enfin, l'application gère les erreurs. Si une syntaxe est incorrecte, elle indique la ligne concernée et donne un exemple correct pour aider l'utilisateur à corriger son programme.
 >
 > Pour conclure, ce projet montre le fonctionnement complet d'un petit processeur : écriture assembleur, assemblage, chargement mémoire, décodage, exécution, registres, ALU, mémoire et interface graphique.
